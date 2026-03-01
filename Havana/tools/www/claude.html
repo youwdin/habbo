@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Beebo Terminal — Havana</title>
+  <link href="https://fonts.googleapis.com/css2?family=Ubuntu+Condensed&family=VT323&display=swap" rel="stylesheet" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background-color: #1a1a2e;
+      background-image:
+        repeating-linear-gradient(0deg, transparent, transparent 31px, rgba(0,64,128,0.15) 31px, rgba(0,64,128,0.15) 32px),
+        repeating-linear-gradient(90deg, transparent, transparent 31px, rgba(0,64,128,0.15) 31px, rgba(0,64,128,0.15) 32px);
+      font-family: "Ubuntu Condensed", sans-serif;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    .terminal-window {
+      width: 100%;
+      max-width: 720px;
+      border: 2px solid #004080;
+      border-radius: 6px;
+      overflow: hidden;
+      box-shadow: 0 0 30px rgba(0, 100, 200, 0.4), inset 0 0 60px rgba(0,0,0,0.3);
+    }
+
+    .title-bar {
+      background: linear-gradient(180deg, #004080 0%, #002a5c 100%);
+      padding: 6px 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 2px solid #0066cc;
+    }
+
+    .title-bar-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .pixel-icon {
+      width: 16px;
+      height: 16px;
+      image-rendering: pixelated;
+    }
+
+    .title-bar h1 {
+      font-family: "VT323", monospace;
+      font-size: 18px;
+      color: #7ec8ff;
+      letter-spacing: 2px;
+      text-shadow: 0 0 8px #0088ff;
+    }
+
+    .title-bar-dots {
+      display: flex;
+      gap: 5px;
+    }
+
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      border: 1px solid rgba(255,255,255,0.3);
+    }
+    .dot.red   { background: #ff5f57; }
+    .dot.yellow{ background: #febc2e; }
+    .dot.green { background: #28c840; }
+
+    .chat-area {
+      background: #0d1117;
+      height: 420px;
+      overflow-y: auto;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      scroll-behavior: smooth;
+    }
+
+    .chat-area::-webkit-scrollbar { width: 6px; }
+    .chat-area::-webkit-scrollbar-track { background: #0d1117; }
+    .chat-area::-webkit-scrollbar-thumb { background: #004080; border-radius: 3px; }
+
+    .message {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      max-width: 85%;
+      animation: fadeIn 0.2s ease;
+    }
+
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+
+    .message.user  { align-self: flex-end; align-items: flex-end; }
+    .message.claude { align-self: flex-start; align-items: flex-start; }
+
+    .message-label {
+      font-family: "VT323", monospace;
+      font-size: 13px;
+      color: #4a6fa5;
+      letter-spacing: 1px;
+    }
+
+    .message.user  .message-label { color: #5a9a5a; }
+    .message.claude .message-label { color: #4a7abf; }
+
+    .bubble {
+      padding: 8px 12px;
+      border-radius: 4px;
+      font-size: 15px;
+      line-height: 1.5;
+      word-break: break-word;
+      white-space: pre-wrap;
+    }
+
+    .message.user .bubble {
+      background: #1a3a1a;
+      border: 1px solid #2a6a2a;
+      color: #90ee90;
+    }
+
+    .message.claude .bubble {
+      background: #0f1e35;
+      border: 1px solid #004080;
+      color: #a8c8ff;
+    }
+
+    .message.system .bubble {
+      background: #1a1a0a;
+      border: 1px solid #555500;
+      color: #aaaa50;
+      font-family: "VT323", monospace;
+      font-size: 14px;
+      align-self: center;
+      text-align: center;
+      width: 100%;
+      max-width: 100%;
+    }
+
+    .typing-indicator {
+      display: flex;
+      gap: 4px;
+      align-items: center;
+      padding: 10px 12px;
+      background: #0f1e35;
+      border: 1px solid #004080;
+      border-radius: 4px;
+      width: fit-content;
+    }
+
+    .typing-dot {
+      width: 7px;
+      height: 7px;
+      background: #4a7abf;
+      border-radius: 50%;
+      animation: bounce 1.2s infinite;
+    }
+    .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+    .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+
+    @keyframes bounce {
+      0%, 60%, 100% { transform: translateY(0); }
+      30% { transform: translateY(-6px); }
+    }
+
+    .api-bar {
+      background: #0a0f1a;
+      border-top: 1px solid #004080;
+      border-bottom: 1px solid #002a5c;
+      padding: 8px 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .api-bar label {
+      font-family: "VT323", monospace;
+      font-size: 14px;
+      color: #4a6fa5;
+      white-space: nowrap;
+      letter-spacing: 1px;
+    }
+
+    .api-bar input {
+      flex: 1;
+      background: #111827;
+      border: 1px solid #004080;
+      border-radius: 3px;
+      color: #7ec8ff;
+      font-family: "VT323", monospace;
+      font-size: 15px;
+      padding: 4px 8px;
+      outline: none;
+    }
+
+    .api-bar input:focus { border-color: #0066cc; box-shadow: 0 0 6px rgba(0,102,204,0.4); }
+
+    .save-btn {
+      background: #003366;
+      border: 1px solid #0055aa;
+      border-radius: 3px;
+      color: #7ec8ff;
+      font-family: "VT323", monospace;
+      font-size: 14px;
+      padding: 4px 10px;
+      cursor: pointer;
+      letter-spacing: 1px;
+    }
+    .save-btn:hover { background: #004080; }
+
+    .input-bar {
+      background: #0a0f1a;
+      border-top: 2px solid #004080;
+      padding: 10px 12px;
+      display: flex;
+      gap: 8px;
+      align-items: flex-end;
+    }
+
+    .prompt-prefix {
+      font-family: "VT323", monospace;
+      font-size: 20px;
+      color: #0066cc;
+      padding-bottom: 6px;
+      user-select: none;
+    }
+
+    #user-input {
+      flex: 1;
+      background: #111827;
+      border: 1px solid #004080;
+      border-radius: 3px;
+      color: #e0e0e0;
+      font-family: "Ubuntu Condensed", sans-serif;
+      font-size: 15px;
+      padding: 7px 10px;
+      outline: none;
+      resize: none;
+      min-height: 38px;
+      max-height: 120px;
+      line-height: 1.4;
+    }
+
+    #user-input:focus { border-color: #0066cc; box-shadow: 0 0 8px rgba(0,102,204,0.3); }
+
+    #send-btn {
+      background: linear-gradient(180deg, #005599 0%, #003d7a 100%);
+      border: 1px solid #0066cc;
+      border-radius: 4px;
+      color: #ffffff;
+      font-family: "VT323", monospace;
+      font-size: 18px;
+      padding: 6px 16px;
+      cursor: pointer;
+      letter-spacing: 1px;
+      white-space: nowrap;
+      align-self: stretch;
+    }
+
+    #send-btn:hover { background: linear-gradient(180deg, #0066bb 0%, #004a90 100%); }
+    #send-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .status-bar {
+      background: #050a12;
+      border-top: 1px solid #002a5c;
+      padding: 4px 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .status-bar span {
+      font-family: "VT323", monospace;
+      font-size: 13px;
+      color: #2a4a6a;
+      letter-spacing: 1px;
+    }
+
+    #status-text { color: #3a6a3a; }
+  </style>
+</head>
+<body>
+<div class="terminal-window">
+
+  <!-- Title bar -->
+  <div class="title-bar">
+    <div class="title-bar-left">
+      <div class="title-bar-dots">
+        <div class="dot red"></div>
+        <div class="dot yellow"></div>
+        <div class="dot green"></div>
+      </div>
+      <h1>&#x25A0; BEEBO TERMINAL v1.0</h1>
+    </div>
+    <span style="font-family:'VT323',monospace;font-size:13px;color:#2a5a8a;letter-spacing:1px;">HAVANA // PORT 8080</span>
+  </div>
+
+  <!-- Chat messages -->
+  <div class="chat-area" id="chat-area">
+    <div class="message system">
+      <div class="bubble">[ BEEBO TERMINAL ONLINE ] — Type a message and press ENTER or SEND</div>
+    </div>
+  </div>
+
+  <!-- API key bar -->
+  <div class="api-bar">
+    <label>API KEY ▶</label>
+    <input type="password" id="api-key-input" placeholder="sk-ant-..." />
+    <button class="save-btn" onclick="saveKey()">SAVE</button>
+  </div>
+
+  <!-- Input bar -->
+  <div class="input-bar">
+    <span class="prompt-prefix">&gt;_</span>
+    <textarea id="user-input" placeholder="Enter message..." rows="1"></textarea>
+    <button id="send-btn" onclick="sendMessage()">SEND</button>
+  </div>
+
+  <!-- Status bar -->
+  <div class="status-bar">
+    <span id="status-text">READY</span>
+    <span>BEEBO // claude-sonnet-4-6</span>
+  </div>
+
+</div>
+
+<script>
+  const chatArea = document.getElementById('chat-area');
+  const userInput = document.getElementById('user-input');
+  const sendBtn = document.getElementById('send-btn');
+  const apiKeyInput = document.getElementById('api-key-input');
+  const statusText = document.getElementById('status-text');
+
+  const history = [];
+
+  // Pre-configured key (also saves to localStorage for persistence)
+  const DEFAULT_KEY = '';
+  if (!localStorage.getItem('claude_api_key')) {
+    localStorage.setItem('claude_api_key', DEFAULT_KEY);
+  }
+  const savedKey = localStorage.getItem('claude_api_key');
+  apiKeyInput.value = savedKey;
+  setStatus('KEY LOADED', '#3a9a3a');
+
+  function saveKey() {
+    const key = apiKeyInput.value.trim();
+    if (!key) return;
+    localStorage.setItem('claude_api_key', key);
+    setStatus('KEY SAVED', '#3a9a3a');
+    setTimeout(() => setStatus('READY', '#3a6a3a'), 2000);
+  }
+
+  function setStatus(msg, color = '#3a6a3a') {
+    statusText.textContent = msg;
+    statusText.style.color = color;
+  }
+
+  function appendMessage(role, text) {
+    const wrap = document.createElement('div');
+    wrap.className = `message ${role}`;
+
+    if (role !== 'system') {
+      const label = document.createElement('div');
+      label.className = 'message-label';
+      label.textContent = role === 'user' ? '[ YOU ]' : '[ BEEBO ]';
+      wrap.appendChild(label);
+    }
+
+    const bubble = document.createElement('div');
+    bubble.className = 'bubble';
+    bubble.textContent = text;
+    wrap.appendChild(bubble);
+
+    chatArea.appendChild(wrap);
+    chatArea.scrollTop = chatArea.scrollHeight;
+    return bubble;
+  }
+
+  function showTyping() {
+    const wrap = document.createElement('div');
+    wrap.className = 'message claude';
+    wrap.id = 'typing-wrap';
+
+    const label = document.createElement('div');
+    label.className = 'message-label';
+    label.textContent = '[ BEEBO ]';
+    wrap.appendChild(label);
+
+    const indicator = document.createElement('div');
+    indicator.className = 'typing-indicator';
+    for (let i = 0; i < 3; i++) {
+      const dot = document.createElement('div');
+      dot.className = 'typing-dot';
+      indicator.appendChild(dot);
+    }
+    wrap.appendChild(indicator);
+    chatArea.appendChild(wrap);
+    chatArea.scrollTop = chatArea.scrollHeight;
+  }
+
+  function removeTyping() {
+    const el = document.getElementById('typing-wrap');
+    if (el) el.remove();
+  }
+
+  async function sendMessage() {
+    const text = userInput.value.trim();
+    if (!text) return;
+
+    const apiKey = apiKeyInput.value.trim() || localStorage.getItem('claude_api_key');
+    if (!apiKey) {
+      setStatus('NO API KEY!', '#aa4444');
+      apiKeyInput.focus();
+      return;
+    }
+
+    userInput.value = '';
+    userInput.style.height = 'auto';
+    sendBtn.disabled = true;
+    setStatus('SENDING...', '#aaaa44');
+
+    appendMessage('user', text);
+    history.push({ role: 'user', content: text });
+
+    showTyping();
+
+    try {
+      const response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true'
+        },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-6',
+          max_tokens: 1024,
+          system: 'You are Beebo, an AI assistant inside a Habbo Hotel private server called Havana. Keep responses concise and helpful. You may use ASCII art sparingly for a retro terminal feel.',
+          messages: history
+        })
+      });
+
+      removeTyping();
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        const msg = err?.error?.message || `HTTP ${response.status}`;
+        appendMessage('system', `[ ERROR ] ${msg}`);
+        history.pop();
+        setStatus('ERROR', '#aa4444');
+      } else {
+        const data = await response.json();
+        const reply = data.content?.[0]?.text || '(empty response)';
+        history.push({ role: 'assistant', content: reply });
+        appendMessage('claude', reply);
+        setStatus('READY', '#3a6a3a');
+      }
+    } catch (e) {
+      removeTyping();
+      appendMessage('system', `[ NETWORK ERROR ] ${e.message}`);
+      history.pop();
+      setStatus('ERROR', '#aa4444');
+    }
+
+    sendBtn.disabled = false;
+    userInput.focus();
+  }
+
+  // Auto-resize textarea
+  userInput.addEventListener('input', () => {
+    userInput.style.height = 'auto';
+    userInput.style.height = Math.min(userInput.scrollHeight, 120) + 'px';
+  });
+
+  // Enter to send (Shift+Enter for newline)
+  userInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  });
+</script>
+</body>
+</html>
