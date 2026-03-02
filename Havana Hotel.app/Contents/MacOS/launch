@@ -1,0 +1,90 @@
+#!/bin/bash
+# Havana Hotel launcher — starts servers if needed, then opens Habbo in Ruffle
+
+JAVA="/opt/homebrew/opt/openjdk@17/bin/java"
+MYSQL="/opt/homebrew/bin/mysql"
+RUFFLE="/Applications/Ruffle.app/Contents/MacOS/ruffle"
+HAVANA_DIR="/Users/hassan/Downloads/Havana/Havana"
+SWF="http://localhost:8080/gordon/RELEASE39-22643-22891-200911110035_07c3a2a30713fd5bea8a8caf07e33438/Habbo.swf"
+
+alert() {
+    osascript -e "display alert \"Havana Hotel\" message \"$1\" as warning" 2>/dev/null
+}
+
+# ── 1. MariaDB ───────────────────────────────────────────────────────────────
+if ! /opt/homebrew/bin/brew services list 2>/dev/null | grep -q "mariadb.*started"; then
+    /opt/homebrew/bin/brew services start mariadb 2>/dev/null
+    sleep 3
+fi
+
+# ── 2. Havana Game Server (port 12321) ───────────────────────────────────────
+if ! lsof -i :12321 -sTCP:LISTEN -t >/dev/null 2>&1; then
+    cd "$HAVANA_DIR"
+    nohup "$JAVA" -Djava.net.preferIPv4Stack=true -Djava.net.preferIPv4Addresses=true \
+        -jar "$HAVANA_DIR/Havana-Server.jar" \
+        > "$HAVANA_DIR/server.log" 2>&1 &
+    # Wait up to 15s for server to start
+    for i in $(seq 1 15); do
+        lsof -i :12321 -sTCP:LISTEN -t >/dev/null 2>&1 && break
+        sleep 1
+    done
+fi
+
+# ── 3. Havana Web Server (port 8080) ─────────────────────────────────────────
+if ! lsof -i :8080 -sTCP:LISTEN -t >/dev/null 2>&1; then
+    cd "$HAVANA_DIR"
+    nohup "$JAVA" -Djava.net.preferIPv4Stack=true -Djava.net.preferIPv4Addresses=true \
+        -jar "$HAVANA_DIR/Havana-Web.jar" \
+        > "$HAVANA_DIR/server.web.log" 2>&1 &
+    # Wait up to 15s for web server to start
+    for i in $(seq 1 15); do
+        lsof -i :8080 -sTCP:LISTEN -t >/dev/null 2>&1 && break
+        sleep 1
+    done
+fi
+
+# ── 4. Pick a user ───────────────────────────────────────────────────────────
+USERS=$("$MYSQL" -u havana -phavana123 havana -sN \
+    -e "SELECT username FROM users ORDER BY username;" 2>/dev/null)
+
+if [ -z "$USERS" ]; then
+    alert "No accounts found. Register at http://localhost:8080/register first."
+    exit 1
+fi
+
+USER_COUNT=$(echo "$USERS" | wc -l | tr -d ' ')
+
+if [ "$USER_COUNT" -eq 1 ]; then
+    USERNAME="$USERS"
+else
+    # Build AppleScript list: "alice", "bob", ...
+    CHOICES=$(echo "$USERS" | awk '{printf "\"%s\",", $0}' | sed 's/,$//')
+    FIRST=$(echo "$USERS" | head -1)
+    USERNAME=$(osascript -e \
+        "choose from list {$CHOICES} with title \"Havana Hotel\" \
+         with prompt \"Choose your character:\" \
+         default items {\"$FIRST\"}" 2>/dev/null)
+    [ "$USERNAME" = "false" ] || [ -z "$USERNAME" ] && exit 0
+fi
+
+# ── 5. Get SSO ticket ────────────────────────────────────────────────────────
+SSO_TICKET=$("$MYSQL" -u havana -phavana123 havana -sN \
+    -e "SELECT sso_ticket FROM users WHERE username='$USERNAME' LIMIT 1;" 2>/dev/null)
+
+if [ -z "$SSO_TICKET" ] || [ "$SSO_TICKET" = "NULL" ]; then
+    alert "No SSO ticket for '$USERNAME'. Log in at http://localhost:8080 first to generate one."
+    exit 1
+fi
+
+# ── 6. Launch Ruffle ─────────────────────────────────────────────────────────
+exec "$RUFFLE" "$SWF" \
+    -P"connection.info.host=127.0.0.1" \
+    -P"connection.info.port=12323" \
+    -P"sso.ticket=$SSO_TICKET" \
+    -P"external.variables.txt=http://localhost:8080/flash/gamedata/external_variables.txt" \
+    -P"external.texts.txt=http://localhost:8080/flash/gamedata/external_flash_texts.txt" \
+    -P"client.reload.url=http://localhost:8080/client" \
+    -P"client.connection.failed.url=http://localhost:8080/disconnected" \
+    -P"site.url=http://localhost:8080" \
+    -P"url.prefix=http://localhost:8080" \
+    -P"use.sso.ticket=1"

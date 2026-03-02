@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Beebo Hotel</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; background: #1a1a1a; overflow: hidden; }
+
+    #login-screen {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: 100%;
+      color: #fff;
+      font-family: Arial, sans-serif;
+    }
+    #login-screen h1 { margin-bottom: 24px; font-size: 28px; letter-spacing: 2px; }
+    #login-screen input {
+      display: block;
+      width: 260px;
+      padding: 10px 14px;
+      margin-bottom: 12px;
+      background: #2a2a2a;
+      border: 1px solid #444;
+      border-radius: 4px;
+      color: #fff;
+      font-size: 14px;
+    }
+    #login-screen button {
+      width: 260px;
+      padding: 10px;
+      background: #e8a020;
+      border: none;
+      border-radius: 4px;
+      color: #fff;
+      font-size: 15px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    #login-screen button:hover { background: #c8881a; }
+    #error-msg { color: #f66; margin-top: 10px; font-size: 13px; min-height: 18px; }
+
+    #game-screen { display: none; width: 100%; height: 100%; }
+    #ruffle-player { width: 100%; height: 100%; }
+  </style>
+</head>
+<body>
+
+  <div id="login-screen">
+    <h1>&#127968; Beebo Hotel</h1>
+    <input id="inp-user" type="text"     placeholder="Username" autocomplete="off" />
+    <input id="inp-pass" type="password" placeholder="Password" autocomplete="off" />
+    <button id="btn-login">Enter Hotel</button>
+    <div id="error-msg"></div>
+  </div>
+
+  <div id="game-screen">
+    <div id="ruffle-player"></div>
+  </div>
+
+  <!-- Ruffle must be loaded before use -->
+  <script src="/ruffle/ruffle.js"></script>
+
+  <script>
+    const WEB_BASE   = 'http://127.0.0.1:8080';
+    const GAME_HOST  = '127.0.0.1';
+    const GAME_PORT  = '12323';
+    const FLASH_BASE = WEB_BASE + '/gordon/RELEASE39-22643-22891-200911110035_07c3a2a30713fd5bea8a8caf07e33438/';
+    const SWF_URL    = FLASH_BASE + 'Habbo.swf';
+
+    document.getElementById('btn-login').addEventListener('click', doLogin);
+    document.getElementById('inp-pass').addEventListener('keydown', e => {
+      if (e.key === 'Enter') doLogin();
+    });
+
+    async function doLogin() {
+      const username = document.getElementById('inp-user').value.trim();
+      const password = document.getElementById('inp-pass').value;
+      const errEl    = document.getElementById('error-msg');
+      errEl.textContent = '';
+
+      if (!username || !password) {
+        errEl.textContent = 'Please enter username and password.';
+        return;
+      }
+
+      try {
+        const resp = await fetch(WEB_BASE + '/account/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: `username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`,
+          credentials: 'include',
+          redirect: 'manual',
+        });
+
+        // After login, fetch the SSO ticket from the client page
+        const clientResp = await fetch(WEB_BASE + '/client', { credentials: 'include' });
+        const html = await clientResp.text();
+
+        const match = html.match(/"sso\.ticket"\s*:\s*"([^"]+)"/);
+        if (!match) {
+          errEl.textContent = 'Login failed — check your username/password.';
+          return;
+        }
+
+        launchGame(match[1]);
+      } catch (err) {
+        errEl.textContent = 'Could not connect to web server (' + err.message + ')';
+      }
+    }
+
+    function launchGame(ssoTicket) {
+      document.getElementById('login-screen').style.display = 'none';
+      document.getElementById('game-screen').style.display  = 'block';
+
+      const ruffle = window.RufflePlayer.newest();
+      const player = ruffle.createPlayer();
+      player.style.width  = '100%';
+      player.style.height = '100%';
+      document.getElementById('ruffle-player').appendChild(player);
+
+      player.load({
+        url: SWF_URL,
+        parameters: {
+          'client.allow.cross.domain': '1',
+          'client.notify.cross.domain': '0',
+          'connection.info.host': GAME_HOST,
+          'connection.info.port': GAME_PORT,
+          'site.url': WEB_BASE + '/',
+          'url.prefix': WEB_BASE + '/',
+          'client.reload.url': WEB_BASE + '/disconnected',
+          'client.fatal.error.url': WEB_BASE + '/disconnected',
+          'client.connection.failed.url': WEB_BASE + '/disconnected',
+          'external.variables.txt': WEB_BASE + '/flash/gamedata/external_variables.txt',
+          'external.texts.txt': WEB_BASE + '/flash/gamedata/external_flash_texts.txt',
+          'use.sso.ticket': '1',
+          'sso.ticket': ssoTicket,
+          'flash.client.url': FLASH_BASE,
+          'flash.client.origin': 'popup',
+          'processlog.enabled': '1',
+          'country_code': 'US',
+          'has.identity': '0',
+        },
+        allowScriptAccess: true,
+        backgroundColor: '#000000',
+      });
+    }
+  </script>
+</body>
+</html>

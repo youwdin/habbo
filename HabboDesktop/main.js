@@ -1,59 +1,8 @@
-const { app, BrowserWindow, protocol } = require('electron');
-const path = require('path');
-const http  = require('http');
-const fs    = require('fs');
-const url   = require('url');
+const { app, BrowserWindow } = require('electron');
 
-const WWW_DIR = path.join(__dirname, '../Havana/tools/www');
-const PORT    = 8080;
-
-const MIME = {
-  '.html': 'text/html',
-  '.js':   'application/javascript',
-  '.css':  'text/css',
-  '.swf':  'application/x-shockwave-flash',
-  '.dcr':  'application/x-director',
-  '.wasm': 'application/wasm',
-  '.xml':  'application/xml',
-  '.json': 'application/json',
-  '.png':  'image/png',
-  '.jpg':  'image/jpeg',
-  '.gif':  'image/gif',
-  '.ico':  'image/x-icon',
-  '.svg':  'image/svg+xml',
-  '.ttf':  'font/ttf',
-  '.woff': 'font/woff',
-  '.woff2':'font/woff2',
-};
-
-// Minimal local file server serving www directory
-function startServer(cb) {
-  const server = http.createServer((req, res) => {
-    let filePath = path.join(WWW_DIR, url.parse(req.url).pathname);
-
-    // default to index
-    if (fs.existsSync(filePath) && fs.statSync(filePath).isDirectory()) {
-      filePath = path.join(filePath, 'index.html');
-    }
-
-    const ext  = path.extname(filePath).toLowerCase();
-    const mime = MIME[ext] || 'application/octet-stream';
-
-    fs.readFile(filePath, (err, data) => {
-      if (err) {
-        res.writeHead(404); res.end('Not found');
-      } else {
-        res.writeHead(200, {
-          'Content-Type': mime,
-          'Access-Control-Allow-Origin': '*',
-        });
-        res.end(data);
-      }
-    });
-  });
-
-  server.listen(PORT, '127.0.0.1', () => cb(server));
-}
+// HavanaWeb runs on port 8080 — we load play.html from it directly.
+// Make sure Havana-Web.jar is running before launching this app.
+const HAVANA_WEB = 'http://127.0.0.1:8080';
 
 function createWindow() {
   const win = new BrowserWindow({
@@ -61,26 +10,24 @@ function createWindow() {
     height: 820,
     minWidth: 800,
     minHeight: 600,
-    title: 'Ruffle — Habbo.swf',
+    title: 'Beebo Hotel',
     backgroundColor: '#1a1a1a',
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      // allow the Claude API fetch from renderer
-      webSecurity: false,
+      webSecurity: false,   // needed for cross-origin SWF/WASM requests
     },
   });
 
-  win.loadURL(`http://127.0.0.1:${PORT}/play.html`);
+  // play.html is served by HavanaWeb and uses Ruffle to load Habbo.swf
+  win.loadURL(`${HAVANA_WEB}/play.html`);
 
   // uncomment to open DevTools:
   // win.webContents.openDevTools();
 }
 
 app.whenReady().then(() => {
-  startServer(() => {
-    createWindow();
-  });
+  createWindow();
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

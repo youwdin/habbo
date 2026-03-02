@@ -2,3 +2,4 @@ node_modules/
 *.log
 *.class
 tmp/
+.DS_Store
